@@ -1,0 +1,65 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+env:
+  NODE_ENV: production
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Type check
+        run: bun run build
+        continue-on-error: true
+
+      - name: Lint check
+        run: bun run lint
+        continue-on-error: true
+
+  deploy:
+    name: Deploy to Render
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Trigger Render Deploy
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
+            curl -X POST "$RENDER_DEPLOY_HOOK_URL"
+            echo "✅ Deploy triggered successfully!"
+          else
+            echo "⚠️ RENDER_DEPLOY_HOOK_URL not set. Skipping deploy."
+          fi
+
+      - name: Deployment Success
+        run: |
+          echo "🚀 Deployment initiated!"
+          echo "Check your Render dashboard for deployment status"

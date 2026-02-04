@@ -1,0 +1,50 @@
+services:
+  # Main Web Service
+  - type: web
+    name: sui-discovery-platform
+    env: node
+    region: oregon
+    plan: starter
+    buildCommand: bun install && bun run build
+    startCommand: bun run start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_AUTH_TOKEN
+        sync: false
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: BETTER_AUTH_URL
+        sync: false
+      - key: STRIPE_TEST_KEY
+        sync: false
+      - key: STRIPE_LIVE_KEY
+        sync: false
+    autoDeploy: true
+    
+  # Background Worker (Optional - for usage tracking)
+  - type: worker
+    name: sui-discovery-worker
+    env: node
+    region: oregon
+    plan: starter
+    buildCommand: bun install
+    startCommand: bun run worker
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_AUTH_TOKEN
+        sync: false
+    autoDeploy: true
+
+databases:
+  # Note: Render doesn't support Turso directly
+  # You'll need to use Turso cloud and provide DATABASE_URL manually
+  # Or migrate to PostgreSQL on Render

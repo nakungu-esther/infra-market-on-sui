@@ -1,0 +1,131 @@
+# Envoy Proxy Configuration for Sui Discovery Gateway Integration
+#
+# This configuration demonstrates how to integrate Envoy with
+# the Sui Discovery validation API using external authorization
+
+static_resources:
+  listeners:
+  - name: api_listener
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 80
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          codec_type: AUTO
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: backend
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: protected_api
+                  timeout: 30s
+          http_filters:
+          # External authorization filter for entitlement validation
+          - name: envoy.filters.http.ext_authz
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+              grpc_service:
+                envoy_grpc:
+                  cluster_name: validation_service
+                timeout: 1s
+              failure_mode_allow: false
+              with_request_body:
+                max_request_bytes: 8192
+                allow_partial_message: true
+              clear_route_cache: true
+              
+          # Rate limiting filter
+          - name: envoy.filters.http.ratelimit
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit
+              domain: api_ratelimit
+              failure_mode_deny: false
+              rate_limit_service:
+                grpc_service:
+                  envoy_grpc:
+                    cluster_name: ratelimit_service
+                transport_api_version: V3
+                
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+  clusters:
+  # Protected API cluster
+  - name: protected_api
+    connect_timeout: 5s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: protected_api
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: localhost
+                port_value: 8080
+    health_checks:
+    - timeout: 1s
+      interval: 10s
+      unhealthy_threshold: 2
+      healthy_threshold: 2
+      http_health_check:
+        path: "/health"
+
+  # Validation service cluster
+  - name: validation_service
+    connect_timeout: 1s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    http2_protocol_options: {}
+    load_assignment:
+      cluster_name: validation_service
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: localhost
+                port_value: 3000
+
+  # Rate limit service cluster
+  - name: ratelimit_service
+    connect_timeout: 1s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    http2_protocol_options: {}
+    load_assignment:
+      cluster_name: ratelimit_service
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: localhost
+                port_value: 8081
+
+admin:
+  access_log_path: /tmp/admin_access.log
+  address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 9901
+
+# Note: You need to implement a gRPC external authorization service
+# that implements the envoy.service.auth.v3.Authorization interface.
+# 
+# The service should:
+# 1. Extract API key from request headers
+# 2. Call /api/entitlements/verify endpoint
+# 3. Return OK or DENIED based on validation result
+# 4. Add quota headers to the response
