@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
 
     // Insert new review into serviceReviews table
     const trimmedComment = comment !== undefined && comment !== null ? comment.trim() : null;
-    const now = new Date().toISOString();
+    const nowIso = now.toISOString();
 
     const newReview = await db
       .insert(serviceReviews)
@@ -200,8 +200,8 @@ export async function POST(request: NextRequest) {
         userId: userId,
         rating: parsedRating,
         comment: trimmedComment,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: nowIso,
+        updatedAt: nowIso,
       })
       .returning();
 
